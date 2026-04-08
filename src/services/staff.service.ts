@@ -12,6 +12,7 @@ const toPublicProfile = (user: UserWithRole): UserPublicProfile => ({
     phone: user.phone,
     role: user.roles.role_name,
     clinic_id: user.clinic_id,
+    photo_url: user.photo_url ?? null,
     license_number: user.license_number,
     is_active: user.is_active,
     created_at: user.created_at,
@@ -49,6 +50,7 @@ export const staffService = {
             phone: dto.phone?.trim() ?? null,
             role_id: roleId,
             clinic_id: adminClinicId,
+            photo_url: null,
             license_number: dto.license_number?.trim() ?? null,
             is_active: true,
         });
@@ -95,6 +97,7 @@ export const staffService = {
             phone: null,
             role_id: roleId,
             clinic_id: adminClinicId,
+            photo_url: null,
             license_number: dto.license_number?.trim() ?? null,
             is_active: true,
         });
@@ -132,6 +135,7 @@ export const staffService = {
             phone: dto.phone?.trim() ?? null,
             role_id: roleId,
             clinic_id: adminClinicId,
+            photo_url: null,
             license_number: null,
             is_active: true,
         });

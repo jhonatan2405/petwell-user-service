@@ -11,7 +11,7 @@ const toPublicProfile = (user: UserWithRole): UserPublicProfile => ({
     phone: user.phone,
     role: user.roles.role_name,
     clinic_id: user.clinic_id,
-    photo_url: user.photo_url,
+    photo_url: user.photo_url ?? null,
     clinic_logo_url: user.clinics?.logo_url ?? null,
     license_number: user.license_number,
     is_active: user.is_active,
@@ -159,7 +159,7 @@ export const userService = {
             email: user.email,
             role: user.roles?.role_name || '',
             clinic_id: user.clinic_id,
-            photo_url: user.photo_url
+            photo_url: user.photo_url ?? null
         };
     },
 };

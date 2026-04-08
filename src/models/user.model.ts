@@ -26,7 +26,7 @@ export interface UserRow {
     phone: string | null;
     role_id: number;
     clinic_id: string | null;
-    photo_url: string | null;
+    photo_url?: string | null;
     license_number: string | null;
     is_active: boolean;
     created_at: string;
@@ -59,6 +59,7 @@ export interface UpdateUserDto {
     name?: string;
     email?: string;
     phone?: string;
+    photo_url?: string | null;
 }
 
 export interface ChangePasswordDto {
@@ -75,7 +76,7 @@ export interface UserPublicProfile {
     phone: string | null;
     role: string;
     clinic_id: string | null;
-    photo_url: string | null;
+    photo_url?: string | null;
     clinic_logo_url?: string | null;
     license_number: string | null;
     is_active: boolean;
