@@ -1,0 +1,311 @@
+=========================================================
+  PetWell — User Service | Documento de ContextIA
+  Última actualización: 2026-04-07 (v11)
+=========================================================
+
+Este documento resume el estado completo del microservicio
+User Service dentro de la plataforma PetWell.
+Está pensado para dar contexto a una IA asistente o a un nuevo
+desarrollador que ingrese al proyecto.
+
+─────────────────────────────────────────────────────────
+1. ¿QUÉ ES PETWELL?
+─────────────────────────────────────────────────────────
+PetWell es una plataforma de gestión veterinaria basada en
+arquitectura de microservicios (Node.js + TypeScript + Express).
+El microservicio "User Service" gestiona todo lo relacionado
+con usuarios, autenticación y clínicas.
+
+─────────────────────────────────────────────────────────
+2. TECNOLOGÍAS UTILIZADAS
+─────────────────────────────────────────────────────────
+- Runtime     : Node.js
+- Lenguaje    : TypeScript
+- Framework   : Express
+- Base de datos: Supabase (PostgreSQL)
+- Auth        : JWT (jsonwebtoken)
+- Hashing     : bcrypt
+- Validación  : express-validator
+- Seguridad   : helmet, cors
+- Logging     : morgan
+
+─────────────────────────────────────────────────────────
+3. ARQUITECTURA DEL PROYECTO
+─────────────────────────────────────────────────────────
+src/
+├── config/
+│   ├── env.ts             ← Variables de entorno tipadas
+│   └── supabase.ts        ← Cliente Supabase
+├── controllers/
+│   ├── auth.controller.ts    ← register, login
+│   ├── user.controller.ts    ← profile, changePassword, createVeterinarian, createReceptionist, createStaff
+│   └── clinic.controller.ts  ← registerClinic, getClinic, getClinicStaff
+├── middlewares/
+│   ├── auth.middleware.ts    ← authenticate (JWT)
+│   ├── role.middleware.ts    ← authorize, adminOnly, clinicAdminOnly, etc.
+│   ├── validate.middleware.ts← express-validator handler
+│   └── error.middleware.ts   ← Global error handler
+├── models/
+│   ├── user.model.ts         ← UserRole, UserRow, DTOs, JwtPayload
+│   └── clinic.model.ts       ← ClinicRow, RegisterClinicDto, ClinicPublicProfile,
+│                                CreateVeterinarianDto, CreateReceptionistDto, CreateStaffDto
+├── repositories/
+│   ├── user.repository.ts    ← CRUD usuarios + getRoleIdByName
+│   └── clinic.repository.ts  ← CRUD clínicas + findStaffByClinicId + toClinicPublicProfile
+├── routes/
+│   ├── auth.routes.ts        ← POST /users/register, POST /users/login
+│   ├── user.routes.ts        ← GET|PUT /users/profile, PUT /change-password,
+│   │                            POST /users/veterinarians, POST /users/receptionists, POST /users/staff
+│   ├── clinic.routes.ts      ← POST /clinics/register, GET /clinics/:id, GET /clinics/:id/staff
+│   └── index.ts              ← Router principal (monta /users y /clinics)
+├── services/
+│   ├── auth.service.ts       ← register y login
+│   ├── user.service.ts       ← profile, updateProfile, changePassword, getUserById
+│   ├── clinic.service.ts     ← registerClinic, getClinic, getClinicStaff
+│   └── staff.service.ts      ← createVeterinarian, createReceptionist, createStaff
+├── utils/
+│   ├── jwt.util.ts           ← generateToken, verifyToken
+│   └── response.util.ts      ← sendSuccess, sendError
+└── server.ts                 ← Bootstrap Express
+
+database/
+├── schema.sql                    ← Script SQL completo para Supabase (fresh install)
+├── migration_v2_clinics.sql      ← Añade tabla clinics y columnas a users
+└── migration_v3_clinic_profile.sql ← Añade opening_hours y specialties a clinics [NUEVO v5]
+
+─────────────────────────────────────────────────────────
+4. BASE DE DATOS (Supabase / PostgreSQL)
+─────────────────────────────────────────────────────────
+Tablas:
+
+  roles
+  ──────────────────
+  id          SERIAL PRIMARY KEY
+  role_name   VARCHAR(50) UNIQUE
+
+  Valores:
+    ADMIN, VETERINARIO, CLINICA, DUENO_MASCOTA,
+    CLINIC_ADMIN, RECEPCIONISTA
+
+  clinics
+  ──────────────────
+  id            UUID PRIMARY KEY
+  name          VARCHAR(255)
+  address       TEXT
+  city          VARCHAR(100)
+  phone         VARCHAR(20)
+  tax_id        VARCHAR(50) UNIQUE
+  opening_hours TEXT         [NUEVO v5]
+  specialties   TEXT         [NUEVO v5]
+  created_at    TIMESTAMPTZ
+
+  users
+  ──────────────────
+  id              UUID PRIMARY KEY
+  name            VARCHAR(255)
+  email           VARCHAR(255) UNIQUE
+  password_hash   TEXT
+  phone           VARCHAR(20)
+  role_id         INTEGER → roles(id)
+  clinic_id       UUID → clinics(id)
+  license_number  VARCHAR(100)
+  is_active       BOOLEAN
+  created_at      TIMESTAMPTZ
+  updated_at      TIMESTAMPTZ  (auto-updated por trigger)
+
+─────────────────────────────────────────────────────────
+5. ENDPOINTS DISPONIBLES
+─────────────────────────────────────────────────────────
+BASE URL: http://localhost:<PORT>/api/v1
+
+── Autenticación (pública) ──────────────────────────────
+
+POST /api/v1/users/register
+  Body: { name, email, password, phone? }
+  → Registra un DUENO_MASCOTA
+  → Responde: { token, user }
+
+POST /api/v1/users/login
+  Body: { email, password }
+  → Responde: { token, user }
+
+── Clínicas (pública con JWT) ───────────────────────────
+
+GET  /api/v1/clinics                                         [NUEVO v6]
+  → Lista todas las clínicas
+  → Requiere: Bearer Token
+  → Responde: { clinics: [{ id, name }] }
+
+POST /api/v1/clinics/register
+  Body: {
+    clinic_name, admin_name, email, password, phone,
+    address, city, tax_id,
+    opening_hours?,    ← NUEVO v5
+    specialties?       ← NUEVO v5
+  }
+  → Crea la clínica y un usuario con rol CLINIC_ADMIN
+  → Responde: { clinic, admin, token }
+
+── Usuarios autenticados (requiere Bearer Token) ─────────
+
+GET  /api/v1/users/profile
+  → Campos: { id, name, email, phone, role, clinic_id, license_number, is_active, created_at, updated_at }
+
+GET  /api/v1/users/:id                                       [ACTUALIZADO v8]
+  → Permite obtener información básica de un usuario mediante su identificador
+  → Requiere: Bearer Token (cualquier rol)
+  → Uso: comunicación entre microservicios (ej. Pet Service resuelve info dueños)
+  → Responde: { id, name, email }
+
+GET  /api/v1/users/by-email?email=...                        [NUEVO v7]
+  → Busca un usuario por email
+  → Requiere: Bearer Token
+  → Uso: comunicación entre microservicios (ej. Pet Service vincula dueño)
+  → Responde: { id, name, email }
+
+PUT  /api/v1/users/profile
+  Body: { name?, email?, phone? }
+  → Actualiza nombre, email y/o teléfono
+
+PUT  /api/v1/users/change-password
+  Body: { current_password, new_password }
+
+── Staff de clínica (requiere CLINIC_ADMIN) ──────────────
+
+POST /api/v1/users/veterinarians
+  Body: { name, email, password, license_number, phone? }
+  → Crea un VETERINARIO en la clínica del admin
+
+POST /api/v1/users/receptionists
+  Body: { name, email, password, phone? }
+  → Crea un RECEPCIONISTA en la clínica del admin
+
+POST /api/v1/users/staff
+  Body: { name, email, password, role: "VETERINARIO"|"RECEPCIONISTA", license_number? }
+  → Crea personal genérico en la clínica del admin
+
+── Clínicas (requiere ADMIN | CLINIC_ADMIN) ─────────────
+
+GET  /api/v1/clinics/:id
+  → Campos: { id, name, address, city, phone, tax_id, opening_hours, specialties, created_at }
+                                                          ↑ NUEVO v5
+
+GET  /api/v1/clinics/:id/staff
+  → Solo VETERINARIO y RECEPCIONISTA (excluye CLINIC_ADMIN)
+  → Campos por miembro: { id, name, email, phone, role, license_number, created_at }
+
+── Solo ADMIN ────────────────────────────────────────────
+
+GET  /api/v1/users          → Lista todos los usuarios
+
+─────────────────────────────────────────────────────────
+6. ROLES Y PERMISOS
+─────────────────────────────────────────────────────────
+ADMIN           → Acceso total
+CLINIC_ADMIN    → Crea veterinarios y staff de su clínica
+VETERINARIO     → Acceso a funciones clínicas (según se extienda)
+RECEPCIONISTA   → Personal de clínica
+CLINICA         → Rol heredado / reservado
+DUENO_MASCOTA   → Dueño de mascota (registro público estándar)
+
+Middlewares de roles disponibles:
+  - authenticate        → valida JWT
+  - adminOnly           → solo ADMIN
+  - clinicAdminOnly     → solo CLINIC_ADMIN
+  - veterinarianOnly    → solo VETERINARIO
+  - clinicOnly          → solo CLINICA
+  - petOwnerOnly        → solo DUENO_MASCOTA
+  - adminOrVeterinarian → ADMIN o VETERINARIO
+  - authorize(...roles) → factory genérica
+
+─────────────────────────────────────────────────────────
+7. FORMATO DE RESPUESTA
+─────────────────────────────────────────────────────────
+Todas las respuestas siguen el formato:
+
+  {
+    "success": true | false,
+    "message": "Mensaje descriptivo",
+    "data": { ... }    // null en errores o en operaciones sin retorno
+  }
+
+─────────────────────────────────────────────────────────
+8. JWT PAYLOAD
+─────────────────────────────────────────────────────────
+{
+  "sub": "<user_id>",
+  "email": "<email>",
+  "role": "<role_name>",
+  "clinic_id": "<clinic_id> | null",
+  "iat": <timestamp>,
+  "exp": <timestamp>
+}
+
+─────────────────────────────────────────────────────────
+9. HISTORIAL DE CAMBIOS POR VERSIÓN
+─────────────────────────────────────────────────────────
+v1: Microservicio base — registro, login, perfil, cambio de contraseña, roles básicos
+v2: roles ADMIN/CLINICA/DUENO_MASCOTA/VETERINARIO, respuestas estandarizadas
+v3: tabla clinics, CLINIC_ADMIN, RECEPCIONISTA, POST /clinics/register,
+    POST /users/veterinarians, POST /users/staff, GET /clinics/:id/staff
+v4: [FIX]    Bug en GET /clinics/:id/staff (join roles mal tipiado como array)
+    [NUEVO]  POST /users/receptionists
+    [UPDATE] PUT /users/profile permite actualizar email
+    [UPDATE] POST /users/veterinarians acepta phone
+v6: [NUEVO]  GET /clinics — lista { id, name } de todas las clínicas
+    [ARCH]   clinicService.getAllClinics(), clinicController.getClinics()
+v7: [NUEVO]  GET /users/by-email?email= — búsqueda de usuario por email
+    [ARCH]   userService.findUserByEmail(), userController.findUserByEmail()
+v8: [UPDATE] GET /users/:id — ahora accesible por cualquier rol (para info básica)
+    [ARCH]   userService.findUserById(), userController.getUserById() modificado
+    [UPDATE] POST /clinics/register acepta opening_hours y specialties (opcionales)
+    [UPDATE] GET /clinics/:id devuelve opening_hours y specialties
+    [NUEVO]  database/migration_v3_clinic_profile.sql
+
+v11: [NUEVO]  POST /users/me/photo — Subir foto de perfil de usuario (multipart/form-data)
+         Almacenamiento: Supabase Storage (bucket: user-photos)
+         Responde: { photo_url }
+     [NUEVO]  POST /clinics/:id/logo — Subir logo de clínica (multipart/form-data)
+         Almacenamiento: Supabase Storage (bucket: clinic-logos)
+         Responde: { logo_url }
+     [NUEVO]  Columna photo_url agregada a la tabla users (TEXT nullable).
+     [NUEVO]  Columna logo_url agregada a la tabla clinics (TEXT nullable).
+     [NUEVO]  GET /users/profile ahora retorna clinic_logo_url (JOIN con clinics)
+         → Si el usuario tiene clinic_id, el perfil incluye la logo de su clínica.
+     [UPDATE] Todos los SELECT de user.repository.ts ahora hacen JOIN clinics(logo_url)
+     [UPDATE] user.model.ts: UserWithRole incluye clinics?: { logo_url }
+              UserPublicProfile incluye clinic_logo_url?: string | null
+     [UPDATE] user.service.ts: toPublicProfile() mapea clinic_logo_url
+     [NEW]    database/migration_users_photo_url.sql — ADD COLUMN photo_url + NOTIFY pgrst
+     [NEW]    database/migration_clinics_logo_url.sql — ADD COLUMN logo_url + NOTIFY pgrst
+
+     NOTA: La columna photo_url necesita NOTIFY pgrst, 'reload schema' para ser reconocida
+     por PostgREST. Ejecutar en Supabase SQL Editor del proyecto User Service.
+
+=========================================================
+  12. CÓMO EJECUTAR EL SERVICIO
+=========================================================
+1. Instalar dependencias:
+     npm install
+
+2. Configurar variables de entorno:
+     Copia .env.example → .env y completa los valores:
+       SUPABASE_URL=
+       SUPABASE_SERVICE_ROLE_KEY=
+       JWT_SECRET=
+       JWT_EXPIRES_IN=7d
+       PORT=3000
+       NODE_ENV=development
+       ALLOWED_ORIGINS=http://localhost:5173
+
+3a. Fresh install (nueva BD):
+     Ejecuta database/schema.sql en el SQL Editor de Supabase
+
+3b. Migrar BD existente:
+     Ejecuta: database/migration_users_photo_url.sql
+     Ejecuta: database/migration_clinics_logo_url.sql
+
+4. Iniciar en modo desarrollo:
+     npm run dev
+
+=========================================================
