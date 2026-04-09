@@ -11,7 +11,7 @@ router.get('/health', (_req, res) => {
 });
 
 // Mount domain routes
-router.use('/users', authRoutes);
+router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/clinics', clinicRoutes);
 
