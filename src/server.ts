@@ -24,6 +24,11 @@ app.use(express.json({ limit: '10kb' }));   // Parse JSON bodies
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan(env.isDevelopment ? 'dev' : 'combined'));  // HTTP request logging
 
+// ── Health Check ────────────────────────────────────────────────────────────
+app.get('/', (_req, res) => {
+    res.status(200).send('User Service OK');
+});
+
 // ── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/v1', router);
 
@@ -36,7 +41,7 @@ app.use((_req, res) => {
 app.use(errorHandler);
 
 // ── Start Server ─────────────────────────────────────────────────────────────
-app.listen(env.port, () => {
+app.listen(env.port, '0.0.0.0', () => {
     console.log(`
   ╔══════════════════════════════════════════╗
   ║  🐾 PetWell — User Service               ║
