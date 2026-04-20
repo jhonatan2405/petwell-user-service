@@ -62,6 +62,11 @@ export const clinicService = {
             photo_url: null,
             license_number: null,
             is_active: true,
+            is_verified: true,
+            verification_code: null,
+            verification_expires: null,
+            reset_code: null,
+            reset_expires: null,
         });
 
         // 6. Issue JWT

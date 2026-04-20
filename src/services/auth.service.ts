@@ -7,7 +7,11 @@ import {
     AuthResponse,
     UserPublicProfile,
     UserWithRole,
+    VerifyEmailDto,
+    ForgotPasswordDto,
+    ResetPasswordDto,
 } from '../models/user.model';
+import { env } from '../config/env';
 
 const SALT_ROUNDS = 12;
 
@@ -22,6 +26,7 @@ const toPublicProfile = (user: UserWithRole): UserPublicProfile => ({
     photo_url: user.photo_url ?? null,
     license_number: user.license_number,
     is_active: user.is_active,
+    is_verified: user.is_verified,
     created_at: user.created_at,
     updated_at: user.updated_at,
 });
@@ -59,7 +64,11 @@ export const authService = {
         // 3. Hash password
         const password_hash = await bcrypt.hash(dto.password, SALT_ROUNDS);
 
-        // 4. Persist
+        // 4. Verification fields
+        const verification_code = Math.floor(100000 + Math.random() * 900000).toString();
+        const verification_expires = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
+
+        // 5. Persist
         const newUser = await userRepository.create({
             name: dto.name.trim(),
             email: dto.email.toLowerCase().trim(),
@@ -70,18 +79,32 @@ export const authService = {
             photo_url: null,
             license_number: dto.license_number ?? null,
             is_active: true,
+            is_verified: false,
+            verification_code,
+            verification_expires,
+            reset_code: null,
+            reset_expires: null,
         });
 
-        // 5. Issue token
+        // 6. Enviar email (fire-and-forget inmediato)
+        console.log("📧 Enviando código de verificación a:", newUser.email);
+        await fetch(`${env.notificationServiceUrl}/api/v1/notifications`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: newUser.email,
+                type: 'SYSTEM',
+                title: 'Código de verificación',
+                message: `Tu código es: ${verification_code}`,
+                channel: 'EMAIL',
+            }),
+        }).catch((err) => {
+            console.error("❌ Error enviando código:", err);
+        });
+
         const profile = toPublicProfile(newUser);
-        const token = generateToken({
-            sub: newUser.id,
-            email: newUser.email,
-            role: profile.role,
-            clinic_id: profile.clinic_id,
-        });
 
-        return { token, user: profile };
+        return { user: profile, message: 'Usuario registrado. Por favor verifica tu correo.' };
     },
 
     /**
@@ -94,6 +117,13 @@ export const authService = {
         if (!user) {
             const err = new Error('Credenciales inválidas');
             (err as { statusCode?: number }).statusCode = 401;
+            throw err;
+        }
+
+        // 1.5. Verificación required
+        if (!user.is_verified) {
+            const err = new Error('Cuenta no verificada');
+            (err as { statusCode?: number }).statusCode = 403;
             throw err;
         }
 
@@ -115,5 +145,167 @@ export const authService = {
         });
 
         return { token, user: profile };
+    },
+
+    /**
+     * Verifies the user's email with the verification code.
+     * Returns a JWT + public profile to auto-login.
+     */
+    async verifyEmail(dto: VerifyEmailDto): Promise<AuthResponse> {
+        const userRow = await userRepository.findRawById((await userRepository.findByEmail(dto.email))?.id || '');
+        if (!userRow) {
+            const err = new Error('Usuario no encontrado');
+            (err as { statusCode?: number }).statusCode = 404;
+            throw err;
+        }
+
+        if (userRow.is_verified) {
+            const err = new Error('La cuenta ya está verificada');
+            (err as { statusCode?: number }).statusCode = 400;
+            throw err;
+        }
+
+        if (userRow.verification_code !== dto.code) {
+            const err = new Error('Código de verificación incorrecto');
+            (err as { statusCode?: number }).statusCode = 400;
+            throw err;
+        }
+
+        if (userRow.verification_expires && new Date() > new Date(userRow.verification_expires)) {
+            const err = new Error('El código de verificación ha expirado');
+            (err as { statusCode?: number }).statusCode = 400;
+            throw err;
+        }
+
+        await userRepository.updateVerification(userRow.id, {
+            is_verified: true,
+            verification_code: null,
+            verification_expires: null,
+        });
+
+        // Generate token for auto-login
+        const fullUser = await userRepository.findByEmail(dto.email);
+        if (!fullUser) throw new Error('Usuario recargado no encontrado tras verificación');
+        const profile = toPublicProfile(fullUser);
+        const token = generateToken({
+            sub: fullUser.id,
+            email: fullUser.email,
+            role: profile.role,
+            clinic_id: profile.clinic_id,
+        });
+
+        return { token, user: profile, message: 'Cuenta verificada exitosamente' };
+    },
+
+    /**
+     * Resends the verification code for the given email.
+     */
+    async resendVerificationCode(dto: { email: string }): Promise<void> {
+        const userRow = await userRepository.findRawById((await userRepository.findByEmail(dto.email))?.id || '');
+        if (!userRow) {
+            const err = new Error('Usuario no encontrado');
+            (err as { statusCode?: number }).statusCode = 404;
+            throw err;
+        }
+
+        if (userRow.is_verified) {
+            const err = new Error('La cuenta ya está verificada');
+            (err as { statusCode?: number }).statusCode = 400;
+            throw err;
+        }
+
+        const verification_code = Math.floor(100000 + Math.random() * 900000).toString();
+        const verification_expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+        await userRepository.updateVerification(userRow.id, {
+            is_verified: false,
+            verification_code,
+            verification_expires,
+        });
+
+        // Enviar email (fire-and-forget)
+        fetch(`${env.notificationServiceUrl}/api/v1/notifications`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: userRow.id,
+                email: userRow.email,
+                type: 'SYSTEM',
+                title: 'Nuevo código de verificación',
+                message: `Tu nuevo código es: ${verification_code}`,
+                channel: 'EMAIL',
+            }),
+        }).catch((err) => {
+            console.error('[ERROR] Fallo al enviar nuevo email de verificación:', err);
+        });
+    },
+
+    /**
+     * Generates a reset code and sends it via email.
+     */
+    async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
+        const userRow = await userRepository.findRawById((await userRepository.findByEmail(dto.email))?.id || '');
+        if (!userRow) {
+            // No revelamos si el usuario existe o no, pero loggueamos para debug interno
+            console.warn(`Forgot password: email ${dto.email} not found`);
+            return;
+        }
+
+        const reset_code = Math.floor(100000 + Math.random() * 900000).toString();
+        const reset_expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+        await userRepository.updateResetData(userRow.id, {
+            reset_code,
+            reset_expires,
+        });
+
+        // Enviar email (fire-and-forget)
+        fetch(`${env.notificationServiceUrl}/api/v1/notifications`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: userRow.id,
+                email: userRow.email,
+                type: 'SYSTEM',
+                title: 'Recuperación de contraseña',
+                message: `Tu código para restablecer contraseña es: ${reset_code}`,
+                channel: 'EMAIL',
+            }),
+        }).catch((err) => {
+            console.error('[ERROR] Fallo al enviar email de reset:', err);
+        });
+    },
+
+    /**
+     * Resets password using the received code.
+     */
+    async resetPassword(dto: ResetPasswordDto): Promise<void> {
+        const userRow = await userRepository.findRawById((await userRepository.findByEmail(dto.email))?.id || '');
+        if (!userRow) {
+            const err = new Error('Usuario no encontrado');
+            (err as { statusCode?: number }).statusCode = 404;
+            throw err;
+        }
+
+        if (userRow.reset_code !== dto.code) {
+            const err = new Error('Código de recuperación incorrecto');
+            (err as { statusCode?: number }).statusCode = 400;
+            throw err;
+        }
+
+        if (!userRow.reset_expires || new Date() > new Date(userRow.reset_expires)) {
+            const err = new Error('El código de recuperación ha expirado');
+            (err as { statusCode?: number }).statusCode = 400;
+            throw err;
+        }
+
+        const password_hash = await bcrypt.hash(dto.new_password, SALT_ROUNDS);
+        
+        await userRepository.updatePassword(userRow.id, password_hash);
+        
+        await userRepository.updateResetData(userRow.id, {
+            reset_code: null,
+            reset_expires: null,
+        });
     },
 };

@@ -75,6 +75,28 @@ export const userRepository = {
     },
 
     /**
+     * Update the verification data of a user.
+     */
+    async updateVerification(
+        id: string,
+        dto: { is_verified: boolean; verification_code: string | null; verification_expires: string | null },
+    ): Promise<void> {
+        const { error } = await supabase.from('users').update(dto).eq('id', id);
+        if (error) throw new Error(error.message);
+    },
+
+    /**
+     * Update the password reset data of a user.
+     */
+    async updateResetData(
+        id: string,
+        dto: { reset_code: string | null; reset_expires: string | null },
+    ): Promise<void> {
+        const { error } = await supabase.from('users').update(dto).eq('id', id);
+        if (error) throw new Error(error.message);
+    },
+
+    /**
      * Fetch the default role id for "DUENO_MASCOTA" – used as the fallback
      * when no role is specified during registration.
      */

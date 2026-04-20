@@ -15,6 +15,7 @@ const toPublicProfile = (user: UserWithRole): UserPublicProfile => ({
     photo_url: user.photo_url ?? null,
     license_number: user.license_number,
     is_active: user.is_active,
+    is_verified: user.is_verified,
     created_at: user.created_at,
     updated_at: user.updated_at,
 });
@@ -53,6 +54,11 @@ export const staffService = {
             photo_url: null,
             license_number: dto.license_number?.trim() ?? null,
             is_active: true,
+            is_verified: true,
+            verification_code: null,
+            verification_expires: null,
+            reset_code: null,
+            reset_expires: null,
         });
 
         return toPublicProfile(newUser);
@@ -100,6 +106,11 @@ export const staffService = {
             photo_url: null,
             license_number: dto.license_number?.trim() ?? null,
             is_active: true,
+            is_verified: true,
+            verification_code: null,
+            verification_expires: null,
+            reset_code: null,
+            reset_expires: null,
         });
 
         return toPublicProfile(newUser);
@@ -138,6 +149,11 @@ export const staffService = {
             photo_url: null,
             license_number: null,
             is_active: true,
+            is_verified: true,
+            verification_code: null,
+            verification_expires: null,
+            reset_code: null,
+            reset_expires: null,
         });
 
         return toPublicProfile(newUser);

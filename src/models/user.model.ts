@@ -29,6 +29,11 @@ export interface UserRow {
     photo_url?: string | null;
     license_number: string | null;
     is_active: boolean;
+    is_verified: boolean;
+    verification_code?: string | null;
+    verification_expires?: string | null;
+    reset_code?: string | null;
+    reset_expires?: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -67,6 +72,21 @@ export interface ChangePasswordDto {
     new_password: string;
 }
 
+export interface VerifyEmailDto {
+    email: string;
+    code: string;
+}
+
+export interface ForgotPasswordDto {
+    email: string;
+}
+
+export interface ResetPasswordDto {
+    email: string;
+    code: string;
+    new_password: string;
+}
+
 // --- API Response Shapes ---
 
 export interface UserPublicProfile {
@@ -80,12 +100,14 @@ export interface UserPublicProfile {
     clinic_logo_url?: string | null;
     license_number: string | null;
     is_active: boolean;
+    is_verified: boolean;
     created_at: string;
     updated_at: string;
 }
 
 export interface AuthResponse {
-    token: string;
+    token?: string;
+    message?: string;
     user: UserPublicProfile;
 }
 

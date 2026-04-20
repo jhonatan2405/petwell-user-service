@@ -21,6 +21,7 @@ export const env = {
     jwtExpiresIn: process.env['JWT_EXPIRES_IN'] ?? '7d',
     supabaseUrl: process.env['SUPABASE_URL'] as string,
     supabaseServiceRoleKey: process.env['SUPABASE_SERVICE_ROLE_KEY'] as string,
+    notificationServiceUrl: process.env['NOTIFICATION_SERVICE_URL'] ?? 'http://localhost:3007',
     allowedOrigins: (process.env['ALLOWED_ORIGINS'] ?? 'http://localhost:3000').split(','),
     isDevelopment: process.env['NODE_ENV'] === 'development',
     isProduction: process.env['NODE_ENV'] === 'production',

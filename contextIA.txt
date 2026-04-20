@@ -128,6 +128,21 @@ POST /api/v1/users/register
 POST /api/v1/users/login
   Body: { email, password }
   → Responde: { token, user }
+  → Error 403 si is_verified es false.
+
+POST /api/v1/users/verify                                    [NUEVO v12]
+  Body: { email, code }
+  → Valida código y expira la verificación.
+  → Si es correcto, actualiza is_verified = true.
+
+POST /api/v1/users/forgot-password                           [NUEVO v12]
+  Body: { email }
+  → Genera un reset_code de 6 dígitos con 10 mins de validez.
+  → Envía email mediante Notification Service.
+
+POST /api/v1/users/reset-password                            [NUEVO v12]
+  Body: { email, code, new_password }
+  → Valida el código de expiración y actualiza la contraseña.
 
 ── Clínicas (pública con JWT) ───────────────────────────
 
@@ -282,6 +297,23 @@ v11: [NUEVO]  POST /users/me/photo — Subir foto de perfil de usuario (multipar
      NOTA: La columna photo_url necesita NOTIFY pgrst, 'reload schema' para ser reconocida
      por PostgREST. Ejecutar en Supabase SQL Editor del proyecto User Service.
 
+v12: [NUEVO] Autenticación avanzada (2FA) por email.
+     [NUEVO] POST /users/verify, POST /users/forgot-password, POST /users/reset-password.
+     [NUEVO] Modificación de tabla 'users' para añadir is_verified, verification_code, verification_expires, reset_code, reset_expires.
+     [UPDATE] POST /users/register ya no retorna JWT, envía un email vía Notification Service usando fetch para verificación de cuenta.
+     [UPDATE] POST /users/login verifica is_verified === true, sino lanza 403.
+     [NEW] database/migration_auth_2fa.sql
+
+─────────────────────────────────────────────────────────
+10. AUTENTICACIÓN AVANZADA (2FA) - FLUJO
+─────────────────────────────────────────────────────────
+Se integra un sistema de validación por correo electrónico conectado a Notification Service (puerto 3007).
+El flujo es fire-and-forget:
+1. El usuario se registra, la DB lo guarda como `is_verified: false` y genera un código matemático aleatorio.
+2. User Service hace una petición FETCH_POST al Notification Service que manda un email (type SYSTEM, channel EMAIL).
+3. El login queda bloqueado (403) hasta que el usuario utilice `/api/v1/users/verify` con su correo y código vigente para autenticarse por primera vez.
+Lo mismo aplica para la recuperación de la contraseña mediante comandos temporales (`forgot-password`, `reset-password`).
+
 =========================================================
   12. CÓMO EJECUTAR EL SERVICIO
 =========================================================
@@ -297,6 +329,7 @@ v11: [NUEVO]  POST /users/me/photo — Subir foto de perfil de usuario (multipar
        PORT=3000
        NODE_ENV=development
        ALLOWED_ORIGINS=http://localhost:5173
+       NOTIFICATION_SERVICE_URL=http://localhost:3007
 
 3a. Fresh install (nueva BD):
      Ejecuta database/schema.sql en el SQL Editor de Supabase

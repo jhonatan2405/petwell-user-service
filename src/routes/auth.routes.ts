@@ -32,4 +32,49 @@ router.post(
     authController.login,
 );
 
+// POST /users/verify
+router.post(
+    '/verify',
+    [
+        body('email').isEmail().withMessage('Valid email is required'),
+        body('code').notEmpty().withMessage('Code is required'),
+    ],
+    validate,
+    authController.verifyEmail,
+);
+
+// POST /users/resend-code
+router.post(
+    '/resend-code',
+    [
+        body('email').isEmail().withMessage('Valid email is required'),
+    ],
+    validate,
+    authController.resendVerificationCode,
+);
+
+// POST /users/forgot-password
+router.post(
+    '/forgot-password',
+    [
+        body('email').isEmail().withMessage('Valid email is required'),
+    ],
+    validate,
+    authController.forgotPassword,
+);
+
+// POST /users/reset-password
+router.post(
+    '/reset-password',
+    [
+        body('email').isEmail().withMessage('Valid email is required'),
+        body('code').notEmpty().withMessage('Code is required'),
+        body('new_password')
+            .isLength({ min: 8 })
+            .withMessage('New password must be at least 8 characters'),
+    ],
+    validate,
+    authController.resetPassword,
+);
+
 export default router;
