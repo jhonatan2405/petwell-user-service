@@ -1,0 +1,59 @@
+==============================================================
+        REPORTE DE PRUEBAS - USER SERVICE MICROSERVICE
+==============================================================
+
+1. INTRODUCCIÓN
+Este documento detalla la implementación y los resultados de las pruebas automatizadas realizadas para el microservicio "User Service" de PetWell. Se probaron las funcionalidades principales del sistema, garantizando la integridad de la lógica de negocio y las rutas API sin modificar el código fuente original. El objetivo principal ha sido validar que el microservicio reaccione correctamente ante escenarios exitosos y de error.
+
+2. PRUEBAS UNITARIAS
+Las pruebas unitarias se enfocaron en aislar y validar la lógica interna de los servicios (`userService`, `authService`, `clinicService`).
+Validan específicamente:
+- Casos exitosos (ej. obtener perfil de usuario, registro exitoso).
+- Caminos alternos y de error (ej. credenciales inválidas, usuario no encontrado, contraseñas incorrectas).
+- Comportamientos con condicionales lógicos (if/else), asegurando que el flujo de try/catch maneje adecuadamente los errores de validación.
+
+3. PRUEBAS DE INTEGRACIÓN
+Las pruebas de integración validan que los endpoints del controlador interactúen correctamente con los servicios subyacentes usando `supertest`, emulando peticiones HTTP reales pero sin levantar el servidor en un puerto.
+Endpoints probados:
+- GET /api/v1/health (Health check del servicio)
+- GET /api/v1/users/profile (Perfil del usuario autenticado)
+- PUT /api/v1/users/profile (Actualización de perfil y validaciones de entrada)
+- POST /api/v1/auth/register (Registro de usuarios)
+- POST /api/v1/auth/login (Autenticación)
+- GET /api/v1/clinics/:id y /api/v1/clinics/:id/staff (Acceso a recursos protegidos)
+
+4. USO DE MOCKS
+Se utilizaron "mocks" (simuladores) para aislar las pruebas de factores externos que pueden fallar y hacer las pruebas inestables.
+- Mock de Base de Datos: Se simuló `userRepository` y `clinicRepository` para no requerir conexión a Supabase real. Esto previene alterar datos en producción y acelera la ejecución de pruebas.
+- Mock de Servicios Externos: Se simuló `fetch` y funciones de `jsonwebtoken` para evitar realizar peticiones HTTP reales al servicio de notificaciones y predecir la validación de tokens.
+- Mock de Encriptación: Se simuló la librería `bcrypt` para validar que las contraseñas se comparen correctamente sin gastar tiempo de CPU.
+
+5. USO DE MATCHERS (JEST)
+Los matchers permiten afirmar condiciones sobre los resultados de las funciones.
+- toBe: Verifica igualdad estricta (ej. comparar status 200 === 200).
+- toEqual: Verifica igualdad de objetos y propiedades a profundidad.
+- toHaveProperty: Confirma si un objeto tiene una propiedad específica (ej. validar si retorna 'message').
+- toBeDefined: Asegura que el valor devuelto no sea nulo ni indefinido, garantizando que una respuesta fue entregada.
+
+6. PRUEBAS ASYNC
+Dado que NodeJS y la base de datos funcionan de forma asíncrona (no bloqueante), las pruebas usan `async/await` para esperar a que las promesas de la base de datos se resuelvan.
+- resolves: Valida que una promesa se resuelva exitosamente y devuelve el valor esperado.
+- rejects: Evalúa que cuando el servicio arroja una excepción asíncrona, el manejador de errores atrape correctamente el problema, probando casos de error.
+
+7. COBERTURA (COVERAGE)
+La cobertura mide qué porcentaje del código está siendo validado.
+- Statements (Sentencias): Porcentaje de instrucciones individuales ejecutadas.
+- Branches (Ramas): Evalúa si los flujos de control (if/else, switch) fueron tomados en todas sus direcciones posibles.
+- Functions (Funciones): Mide cuántas funciones/métodos fueron llamados al menos una vez.
+- Lines (Líneas): El número de líneas de código fuente que fueron recorridas durante las pruebas.
+
+Interpretación: Un porcentaje mayor indica que más escenarios posibles han sido puestos a prueba, reduciendo las probabilidades de encontrar bugs inesperados.
+
+8. EXPLICACIÓN DEL REPORTE HTML
+Al ejecutar `npm run test:coverage`, se genera una carpeta `coverage/lcov-report/index.html`. Al abrir este archivo en cualquier navegador, se muestran visualmente los resultados:
+- Verde (Cubierto): Líneas de código por donde pasó la prueba exitosamente.
+- Rojo (No Cubierto): Líneas ignoradas por los tests, donde el sistema es vulnerable a errores desconocidos (por ejemplo, condicionales if específicos que nunca se cumplieron).
+- Amarillo (Parcial): Ramas lógicas parcialmente evaluadas (ej. un `if` que solo se probó cuando es `true` pero no cuando es `false`).
+
+9. CONCLUSIÓN
+El testing automatizado es crucial para la ingeniería de software moderna. Permite refactorizar con confianza, detectar fallos de regresión de manera instantánea y actuar como documentación viva del comportamiento esperado de la aplicación. En microservicios como User Service, donde recae la seguridad y roles de la plataforma, un suite de pruebas robustas asegura un sistema resiliente y confiable.
