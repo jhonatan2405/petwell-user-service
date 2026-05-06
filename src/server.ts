@@ -3,7 +3,10 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import promBundle from 'express-prom-bundle';
+import client from 'prom-client';
+
+// ── Prometheus: recolección de métricas por defecto (CPU, RAM, etc.) ─────────
+client.collectDefaultMetrics({ prefix: 'user_service_' });
 
 import { env } from './config/env';
 import router from './routes/index';
@@ -25,21 +28,33 @@ app.use(express.json({ limit: '10kb' }));   // Parse JSON bodies
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan(env.isDevelopment ? 'dev' : 'combined'));  // HTTP request logging
 
-// ── Prometheus Monitoring ───────────────────────────────────────────────────
-const metricsMiddleware = promBundle({
-    includeMethod: true,
-    includePath: true,
-    includeStatusCode: true,
-    includeUp: true,
-    promClient: {
-        collectDefaultMetrics: {}
-    }
+// ── Prometheus: contador de peticiones HTTP por ruta ────────────────────────
+const httpRequestCounter = new client.Counter({
+    name: 'user_service_http_requests_total',
+    help: 'Total de peticiones HTTP al User Service',
+    labelNames: ['method', 'route', 'status_code'],
 });
-app.use(metricsMiddleware);
 
-// ── Health Check ────────────────────────────────────────────────────────────
+app.use((req, _res, next) => {
+    _res.on('finish', () => {
+        httpRequestCounter.inc({
+            method: req.method,
+            route: req.path,
+            status_code: _res.statusCode,
+        });
+    });
+    next();
+});
+
+// ── Health Check ─────────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
     res.status(200).send('User Service OK');
+});
+
+// ── Metrics endpoint (Prometheus scrape) ─────────────────────────────────────
+app.get('/metrics', async (_req, res) => {
+    res.set('Content-Type', client.register.contentType);
+    res.end(await client.register.metrics());
 });
 
 // ── Routes ───────────────────────────────────────────────────────────────────
