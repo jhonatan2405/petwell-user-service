@@ -115,4 +115,20 @@ router.post(
     userController.createReceptionist,
 );
 
+// PATCH /users/:id/revoke – CLINIC_ADMIN only
+router.patch(
+    '/:id/revoke',
+    authenticate,
+    clinicAdminOnly,
+    userController.revokeStaff,
+);
+
+// PATCH /users/:id/reactivate – CLINIC_ADMIN only
+router.patch(
+    '/:id/reactivate',
+    authenticate,
+    clinicAdminOnly,
+    userController.reactivateStaff,
+);
+
 export default router;

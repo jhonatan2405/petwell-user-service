@@ -218,4 +218,52 @@ export const userController = {
             next(err);
         }
     },
+
+    /**
+     * PATCH /users/:id/revoke
+     * Requires: Bearer token + CLINIC_ADMIN role
+     * Deactivates a staff member of the admin's clinic.
+     */
+    async revokeStaff(
+        req: Request,
+        res: Response,
+        next: NextFunction,
+    ): Promise<void> {
+        try {
+            const adminClinicId = req.user!.clinic_id;
+            if (!adminClinicId) {
+                res.status(400).json({ success: false, message: 'El administrador no tiene una clínica asociada' });
+                return;
+            }
+            const { id } = req.params;
+            const result = await staffService.revokeStaff(adminClinicId, id);
+            sendSuccess(res, result, 'Acceso del usuario revocado correctamente');
+        } catch (err) {
+            next(err);
+        }
+    },
+
+    /**
+     * PATCH /users/:id/reactivate
+     * Requires: Bearer token + CLINIC_ADMIN role
+     * Reactivates a staff member of the admin's clinic.
+     */
+    async reactivateStaff(
+        req: Request,
+        res: Response,
+        next: NextFunction,
+    ): Promise<void> {
+        try {
+            const adminClinicId = req.user!.clinic_id;
+            if (!adminClinicId) {
+                res.status(400).json({ success: false, message: 'El administrador no tiene una clínica asociada' });
+                return;
+            }
+            const { id } = req.params;
+            const result = await staffService.reactivateStaff(adminClinicId, id);
+            sendSuccess(res, result, 'Usuario reactivado correctamente');
+        } catch (err) {
+            next(err);
+        }
+    },
 };

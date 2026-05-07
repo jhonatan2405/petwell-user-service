@@ -30,13 +30,13 @@ export const userRepository = {
 
     /**
      * Find a user by primary key, joined with role data.
+     * Does NOT filter by is_active so we can find deactivated users too.
      */
     async findById(id: string): Promise<UserWithRole | null> {
         const { data, error } = await supabase
             .from('users')
             .select('*, roles(*), clinics(logo_url)')
             .eq('id', id)
-            .eq('is_active', true)
             .maybeSingle();
 
         if (error) throw new Error(error.message);
@@ -221,6 +221,20 @@ export const userRepository = {
             .eq('id', userId);
 
         if (error) throw new Error(error.message);
+    },
+    /**
+     * Activate or deactivate a user.
+     */
+    async setActiveStatus(id: string, isActive: boolean): Promise<UserWithRole> {
+        const { data, error } = await supabase
+            .from('users')
+            .update({ is_active: isActive })
+            .eq('id', id)
+            .select('*, roles(*), clinics(logo_url)')
+            .single();
+
+        if (error) throw new Error(error.message);
+        return data as UserWithRole;
     },
 };
 

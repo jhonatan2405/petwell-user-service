@@ -158,4 +158,52 @@ export const staffService = {
 
         return toPublicProfile(newUser);
     },
+
+    /**
+     * Revokes (deactivates) a staff member of the admin's clinic.
+     * Sets is_active = false. Only callable by CLINIC_ADMIN users.
+     */
+    async revokeStaff(
+        adminClinicId: string,
+        staffUserId: string,
+    ): Promise<UserPublicProfile> {
+        // 1. Verify the target user belongs to this clinic
+        const targetUser = await userRepository.findById(staffUserId);
+        if (!targetUser) {
+            const err = new Error('Usuario no encontrado');
+            (err as { statusCode?: number }).statusCode = 404;
+            throw err;
+        }
+        if (targetUser.clinic_id !== adminClinicId) {
+            const err = new Error('No puedes revocar un usuario de otra clínica');
+            (err as { statusCode?: number }).statusCode = 403;
+            throw err;
+        }
+
+        // 2. Update is_active = false
+        const updated = await userRepository.setActiveStatus(staffUserId, false);
+        return toPublicProfile(updated);
+    },
+
+    /**
+     * Reactivates a staff member of the admin's clinic.
+     */
+    async reactivateStaff(
+        adminClinicId: string,
+        staffUserId: string,
+    ): Promise<UserPublicProfile> {
+        const targetUser = await userRepository.findById(staffUserId);
+        if (!targetUser) {
+            const err = new Error('Usuario no encontrado');
+            (err as { statusCode?: number }).statusCode = 404;
+            throw err;
+        }
+        if (targetUser.clinic_id !== adminClinicId) {
+            const err = new Error('No puedes reactivar un usuario de otra clínica');
+            (err as { statusCode?: number }).statusCode = 403;
+            throw err;
+        }
+        const updated = await userRepository.setActiveStatus(staffUserId, true);
+        return toPublicProfile(updated);
+    },
 };
