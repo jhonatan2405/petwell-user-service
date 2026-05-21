@@ -79,7 +79,7 @@ app.use(errorHandler);
 
 // ── Start Server (only when run directly, NOT when imported by tests) ─────────
 if (require.main === module) {
-    const server = app.listen(env.port, '0.0.0.0', () => {
+    app.listen(env.port, '0.0.0.0', () => {
         console.log(`
   ╔══════════════════════════════════════════╗
   ║  🐾 PetWell — User Service               ║
@@ -88,8 +88,6 @@ if (require.main === module) {
   ╚══════════════════════════════════════════╝
   `);
     });
-    // unref() permite que el proceso termine aunque el servidor siga escuchando
-    server.unref();
 }
 
 export default app;
