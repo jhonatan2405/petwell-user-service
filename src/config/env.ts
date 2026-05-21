@@ -25,4 +25,5 @@ export const env = {
     allowedOrigins: (process.env['ALLOWED_ORIGINS'] ?? 'http://localhost:3000').split(','),
     isDevelopment: process.env['NODE_ENV'] === 'development',
     isProduction: process.env['NODE_ENV'] === 'production',
+    isTest: process.env['NODE_ENV'] === 'test',
 };

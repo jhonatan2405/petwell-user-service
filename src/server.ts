@@ -5,12 +5,18 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import client from 'prom-client';
 
-// ── Prometheus: recolección de métricas por defecto (CPU, RAM, etc.) ─────────
-client.collectDefaultMetrics({ prefix: 'user_service_' });
-
 import { env } from './config/env';
 import router from './routes/index';
 import { errorHandler } from './middlewares/error.middleware';
+
+// ── Prometheus: recolección de métricas por defecto (CPU, RAM, etc.) ─────────
+// En entorno de test limpiamos el registro para evitar errores de métrica duplicada
+// cuando Jest re-importa el módulo en cada suite de integración.
+if (!env.isTest) {
+    client.collectDefaultMetrics({ prefix: 'user_service_' });
+} else {
+    client.register.clear();
+}
 
 const app = express();
 
@@ -29,22 +35,25 @@ app.use(express.urlencoded({ extended: true }));
 app.use(morgan(env.isDevelopment ? 'dev' : 'combined'));  // HTTP request logging
 
 // ── Prometheus: contador de peticiones HTTP por ruta ────────────────────────
-const httpRequestCounter = new client.Counter({
-    name: 'user_service_http_requests_total',
-    help: 'Total de peticiones HTTP al User Service',
-    labelNames: ['method', 'route', 'status_code'],
-});
-
-app.use((req, _res, next) => {
-    _res.on('finish', () => {
-        httpRequestCounter.inc({
-            method: req.method,
-            route: req.path,
-            status_code: _res.statusCode,
-        });
+// Solo registrar en producción/desarrollo — en test no necesitamos métricas
+if (!env.isTest) {
+    const httpRequestCounter = new client.Counter({
+        name: 'user_service_http_requests_total',
+        help: 'Total de peticiones HTTP al User Service',
+        labelNames: ['method', 'route', 'status_code'],
     });
-    next();
-});
+
+    app.use((req, _res, next) => {
+        _res.on('finish', () => {
+            httpRequestCounter.inc({
+                method: req.method,
+                route: req.path,
+                status_code: _res.statusCode,
+            });
+        });
+        next();
+    });
+}
 
 // ── Health Check ─────────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
@@ -68,15 +77,19 @@ app.use((_req, res) => {
 // ── Global Error Handler (must be last) ──────────────────────────────────────
 app.use(errorHandler);
 
-// ── Start Server ─────────────────────────────────────────────────────────────
-app.listen(env.port, '0.0.0.0', () => {
-    console.log(`
+// ── Start Server (only when run directly, NOT when imported by tests) ─────────
+if (require.main === module) {
+    const server = app.listen(env.port, '0.0.0.0', () => {
+        console.log(`
   ╔══════════════════════════════════════════╗
   ║  🐾 PetWell — User Service               ║
   ║  Mode  : ${env.nodeEnv.padEnd(32)}║
   ║  Port  : ${String(env.port).padEnd(32)}║
   ╚══════════════════════════════════════════╝
   `);
-});
+    });
+    // unref() permite que el proceso termine aunque el servidor siga escuchando
+    server.unref();
+}
 
 export default app;
